@@ -5,6 +5,40 @@ on:
     branches:
       - main
   pull_request:
+  workflow_dispatch:
+    inputs:
+      nurse_name:
+        description: 'Nurse name'
+        required: true
+        default: 'Cameron Lau'
+      gsr:
+        description: 'Galvanic Skin Response (0-1)'
+        required: true
+        default: '0.82'
+      task_switch:
+        description: 'Cognitive Task-Switch Burden (0-1)'
+        required: true
+        default: '0.76'
+      voice_monotony:
+        description: 'Voice Monotony Index (0-1)'
+        required: true
+        default: '0.71'
+      gait_irregularity:
+        description: 'Gait Irregularity (0-1)'
+        required: true
+        default: '0.68'
+      patient_rel:
+        description: 'Patient Relationship Quality (0-1)'
+        required: true
+        default: '0.22'
+      color_chaos:
+        description: 'Color-Pattern Chaos (0-1)'
+        required: true
+        default: '0.74'
+      tiktok_burnout:
+        description: 'TikTok Burnout Signal (0-1)'
+        required: true
+        default: '0.69'
 
 jobs:
   run-demo:
@@ -32,6 +66,14 @@ jobs:
       - name: Run demo script
         env:
           MPLBACKEND: Agg
+          NURSE_NAME: ${{ github.event.inputs.nurse_name || 'Cameron Lau' }}
+          GSR: ${{ github.event.inputs.gsr || '0.82' }}
+          TASK_SWITCH: ${{ github.event.inputs.task_switch || '0.76' }}
+          VOICE_MONOTONY: ${{ github.event.inputs.voice_monotony || '0.71' }}
+          GAIT_IRREGULARITY: ${{ github.event.inputs.gait_irregularity || '0.68' }}
+          PATIENT_REL: ${{ github.event.inputs.patient_rel || '0.22' }}
+          COLOR_CHAOS: ${{ github.event.inputs.color_chaos || '0.74' }}
+          TIKTOK_BURNOUT: ${{ github.event.inputs.tiktok_burnout || '0.69' }}
         run: python app/run_demo.py
 
       - name: Upload generated charts
