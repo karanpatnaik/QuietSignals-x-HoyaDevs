@@ -4,6 +4,7 @@ matplotlib.use("Agg")
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+from pathlib import Path
 
 from model.signals import SIGNALS, FEATURES, CLASS_NAMES, BG, PANEL, TEXT, MUTED, CLASS_COLORS
 from model.fitbit import fitbit_to_signals
@@ -71,3 +72,10 @@ def predict_abte(clf, signal_values: dict, nurse_name="Nurse", fitbit_row=None):
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.0%}"))
     ax.set_axisbelow(True)
     ax.yaxis.grid(True, color=MUTED, linestyle="--", linewidth=0.5, alpha=0.5)
+
+    plt.tight_layout()
+    path = str(out_dir / f"{nurse_name.replace(' ', '_')}.png")
+    plt.savefig(path, dpi=150, facecolor=BG)
+    plt.close()
+
+    print(f"chart saved → {path}\n")
