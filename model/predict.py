@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 
-from model.signals import SIGNALS, FEATURES, CLASS_NAMES
+from model.signals import SIGNALS, FEATURES, CLASS_NAMES, BG, PANEL, TEXT, MUTED, CLASS_COLORS
 from model.fitbit import fitbit_to_signals
 
 #Composite score
@@ -38,7 +38,7 @@ def predict_abte(clf, signal_values: dict, nurse_name="Nurse", fitbit_row=None):
     # save chart
     os.makedirs("outputs", exist_ok=True)
 
-    fg, ax = plt.subplots(figsize=(7, 5))
+    fig, ax = plt.subplots(figsize=(7, 5))
     fig.patch.set_facecolor(BG)
     ax.set_facecolor(PANEL)
 
