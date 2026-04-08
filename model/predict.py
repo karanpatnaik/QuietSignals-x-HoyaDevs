@@ -36,8 +36,10 @@ def predict_abte(clf, signal_values: dict, nurse_name="Nurse", fitbit_row=None):
     print(f"risk : {label}\n")
 
     # save chart
-    os.makedirs("outputs", exist_ok=True)
-
+    root = Path(__file__).parent.parent
+    out_dir = root / "outputs"
+    out_dir.mkdir(exist_ok=True)
+    
     fig, ax = plt.subplots(figsize=(7, 5))
     fig.patch.set_facecolor(BG)
     ax.set_facecolor(PANEL)
