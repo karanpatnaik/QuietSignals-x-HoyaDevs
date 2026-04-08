@@ -30,7 +30,7 @@ jobs:
         run: mkdir -p outputs
 
       - name: Run demo script
-        run: python app/run_demo.py
+        run: MPLBACKEND=Agg python app/run_demo.py
 
       - name: Upload generated charts
         if: success()
