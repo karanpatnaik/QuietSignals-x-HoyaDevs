@@ -48,7 +48,7 @@ def build_dataset(n=1500):
             for f in FEATURES
         )
 
-        label = 0 if score < 0.35 else (1 if score < 0.60 else 2)
+        label = 0 if score < 0.30 else (1 if score < 0.50 else 2)
         rows.append([vals[f] for f in FEATURES] + [round(score, 4), label])
 
     return pd.DataFrame(rows, columns=FEATURES + ["composite_score", "label"])

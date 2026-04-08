@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(pip show:*)",
+      "Bash(streamlit run:*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8501)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8501/healthz)",
+      "Bash(curl -s http://localhost:8502/healthz2)",
+      "Bash(pip install:*)",
+      "Bash(pkill -f \"streamlit run\")",
+      "Bash(echo \"exit: $?\")",
+      "Bash(TF_USE_LEGACY_KERAS=1 python -c \"import tensorflow as tf; print\\('tf ok', tf.__version__\\)\")",
+      "Bash(TF_USE_LEGACY_KERAS=1 python -c \"from deepface import DeepFace; print\\('deepface ok'\\)\")",
+      "Bash(TF_USE_LEGACY_KERAS=1 python -c \"import tensorflow as tf; print\\('tf', tf.__version__\\)\")",
+      "Bash(pip uninstall:*)"
+    ]
+  }
+}
