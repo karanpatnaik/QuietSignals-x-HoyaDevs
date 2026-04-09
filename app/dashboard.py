@@ -33,7 +33,7 @@ except ImportError:
         }
 
 # ── page config ──────────────────────────────────────────────────────────────
-st.set_page_config(page_title="QuietSignals", layout="wide", page_icon="🌿")
+st.set_page_config(page_title="QuietSignals", layout="wide")
 
 # ── color palette ────────────────────────────────────────────────────────────
 C = {
@@ -177,7 +177,7 @@ def radar_chart(sv: dict):
     short = {
         "gsr": "GSR", "task_switch": "Task Switch", "voice_monotony": "Voice Mon.",
         "gait_irregularity": "Gait", "patient_rel": "Patient Rel.",
-        "color_chaos": "Sleep Chaos", "tiktok_burnout": "TikTok",
+        "color_chaos": "Color Chaos", "tiktok_burnout": "TikTok",
         "facial_negative_load": "Neg. Load", "facial_flat_affect": "Flat Affect",
         "facial_positive_protect": "Pos. Affect",
     }
@@ -355,37 +355,26 @@ def hrv_hr_24h_chart(hours, hrv_vals, hr_vals):
     return fig
 
 
-def stroop_result_chart(correct: int, total: int, times: list):
-    """Pie + response-time line for the Color Chaos Exercise results."""
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8, 3.2))
-    fig.patch.set_facecolor(C["panel"])
-    ax1.set_facecolor(C["panel"])
-    ax2.set_facecolor(C["chart_bg"])
-
-    ax1.pie([correct, total - correct],
-            labels=["Correct", "Incorrect"],
-            colors=[C["green"], C["red"]],
-            autopct="%1.0f%%", startangle=90,
-            textprops={"color": "#374151", "fontsize": 10})
-    ax1.set_title("Accuracy Breakdown", fontsize=10, color="#374151", fontweight="600")
-
-    if times:
-        avg_rt = np.mean(times)
-        ax2.plot(range(1, len(times) + 1), times, "o-", color=C["teal"],
-                 linewidth=2, markersize=6)
-        ax2.axhline(avg_rt, color=C["amber"], linestyle="--", linewidth=1.2,
-                    alpha=0.8, label=f"Avg {avg_rt:.1f}s")
-        ax2.set_xlabel("Trial", color=C["muted"], fontsize=9)
-        ax2.set_ylabel("Response Time (s)", color=C["muted"], fontsize=9)
-        ax2.tick_params(colors=C["muted"], labelsize=8)
-        for sp in ax2.spines.values():
-            sp.set_visible(False)
-        ax2.yaxis.grid(True, color=C["border"], linewidth=0.5)
-        ax2.legend(fontsize=8, frameon=False, labelcolor=C["muted"])
-        ax2.set_title("Response Time per Trial", fontsize=10,
-                      color="#374151", fontweight="600")
-
-    fig.tight_layout(pad=1.5)
+def tap_interval_chart(tap_times: list):
+    """Line chart of inter-tap intervals for the stroke irregularity test."""
+    intervals = [tap_times[i+1] - tap_times[i] for i in range(len(tap_times) - 1)]
+    avg_iv = float(np.mean(intervals))
+    fig, ax = _fig_base(6, 2.5)
+    ax.plot(range(1, len(intervals) + 1), intervals, "o-",
+            color=C["teal"], linewidth=2, markersize=6, zorder=3)
+    ax.axhline(avg_iv, color=C["amber"], linestyle="--", linewidth=1.2,
+               alpha=0.8, label=f"Mean {avg_iv:.2f} s")
+    ax.set_xlabel("Tap Interval", color=C["muted"], fontsize=9)
+    ax.set_ylabel("Interval (s)", color=C["muted"], fontsize=9)
+    ax.tick_params(colors=C["muted"], labelsize=8)
+    for sp in ax.spines.values():
+        sp.set_visible(False)
+    ax.yaxis.grid(True, color=C["border"], linewidth=0.5, zorder=0)
+    ax.set_axisbelow(True)
+    ax.legend(fontsize=8, frameon=False, labelcolor=C["muted"])
+    ax.set_title("Tap Interval Regularity", fontsize=10,
+                 color="#374151", fontweight="600")
+    fig.tight_layout(pad=1.2)
     return fig
 
 
@@ -395,39 +384,38 @@ def risk_badge(label: str):
     color  = RISK_COLOR[label]
     bg     = RISK_BG[label]
     border = RISK_BORDER[label]
-    icon   = {"Low": "🟢", "Moderate": "🟡", "High": "🔴"}[label]
     st.markdown(
         f"<div style='background:{bg};color:{color};padding:14px 28px;"
         f"border:2px solid {border};border-radius:50px;"
         f"font-size:1.6rem;font-weight:700;display:inline-block;"
         f"letter-spacing:0.3px;margin-bottom:0.5rem'>"
-        f"{icon} {label} Risk</div>",
+        f"{label} Risk</div>",
         unsafe_allow_html=True,
     )
 
 
 def warning_flags(sv: dict) -> list:
-    """Return list of (icon, label, signal_key, value) for elevated signals."""
+    """Return list of (marker, label, signal_key, value) for elevated signals."""
     flags = []
     high_thresh = {
-        "gsr":                 ("High stress arousal",       0.65),
-        "task_switch":         ("Cognitive overload",         0.65),
-        "voice_monotony":      ("Vocal disengagement",        0.60),
-        "gait_irregularity":   ("Movement irregularity",      0.60),
-        "color_chaos":         ("Sleep schedule chaos",       0.65),
-        "tiktok_burnout":      ("Sleep disruption",           0.65),
-        "facial_negative_load":("Negative emotional load",    0.55),
-        "facial_flat_affect":  ("Flat affect / depersonal.",  0.55),
+        "gsr":                 ("High stress arousal",                    0.65),
+        "task_switch":         ("Cognitive overload",                      0.65),
+        "voice_monotony":      ("Vocal disengagement",                     0.60),
+        "gait_irregularity":   ("Movement irregularity",                   0.60),
+        "color_chaos":         ("Elevated stroke irregularity / color negativity", 0.65),
+        "tiktok_burnout":      ("Sleep disruption",                        0.65),
+        "facial_negative_load":("Negative emotional load",                 0.55),
+        "facial_flat_affect":  ("Flat affect / depersonalization",         0.55),
     }
     low_thresh = {
         "patient_rel":         ("Poor patient relationship quality", 0.35),
     }
     for sig, (lbl, thresh) in high_thresh.items():
         if sv.get(sig, SIGNAL_NEUTRAL) >= thresh:
-            flags.append(("🔴", lbl, sig, sv.get(sig, SIGNAL_NEUTRAL)))
+            flags.append(("[HIGH]", lbl, sig, sv.get(sig, SIGNAL_NEUTRAL)))
     for sig, (lbl, thresh) in low_thresh.items():
         if sv.get(sig, SIGNAL_NEUTRAL) <= thresh:
-            flags.append(("🟠", lbl, sig, sv.get(sig, SIGNAL_NEUTRAL)))
+            flags.append(("[LOW]", lbl, sig, sv.get(sig, SIGNAL_NEUTRAL)))
     return flags
 
 
@@ -445,7 +433,7 @@ def ai_suggestions(sv: dict, label: str) -> list:
     if sv.get("patient_rel", SIGNAL_NEUTRAL) < 0.35:
         tips.append("Patient relationship quality is declining — consider EAP referral for compassion fatigue support.")
     if sv.get("color_chaos", 0) > 0.65:
-        tips.append("Sleep schedule irregularity is high. Consistent wake/sleep times and shift rotation review recommended.")
+        tips.append("Elevated stroke irregularity and color negativity detected. Consider a short break, hydration check, and stress-reduction activity before next patient interaction.")
     if sv.get("tiktok_burnout", 0) > 0.65:
         tips.append("High sleep disruption detected. Reduce screen time 1 hr before sleep; consider a sleep diary.")
     if sv.get("facial_negative_load", 0) > 0.55:
@@ -463,11 +451,11 @@ def ai_suggestions(sv: dict, label: str) -> list:
     return tips[:6]
 
 
-def _flag_card(icon, text, color="#fef2f2", border="#fca5a5", text_color="#991b1b"):
+def _flag_card(marker, text, color="#fef2f2", border="#fca5a5", text_color="#991b1b"):
     st.markdown(
         f"<div style='background:{color};border:1px solid {border};"
         f"border-radius:8px;padding:6px 12px;margin:4px 0;"
-        f"font-size:.85rem;color:{text_color}'>{icon} {text}</div>",
+        f"font-size:.85rem;color:{text_color}'>{marker} {text}</div>",
         unsafe_allow_html=True,
     )
 
@@ -478,11 +466,11 @@ def _tip_card(tip):
         ("#fef2f2", "#fca5a5", "#991b1b") if is_priority
         else ("#f0fdf4", "#86efac", "#166534")
     )
-    icon = "⚡" if is_priority else "💡"
+    prefix = "Priority: " if is_priority else ""
     st.markdown(
         f"<div style='background:{bg};border:1px solid {bd};"
         f"border-radius:8px;padding:8px 12px;margin:5px 0;"
-        f"font-size:.85rem;color:{tc}'>{icon} {tip}</div>",
+        f"font-size:.85rem;color:{tc}'>{prefix}{tip}</div>",
         unsafe_allow_html=True,
     )
 
@@ -490,7 +478,7 @@ def _tip_card(tip):
 # ═══════════════════════════════════════════════════════════════════════════════
 # SIDEBAR — nurse identification + input mode
 # ═══════════════════════════════════════════════════════════════════════════════
-st.sidebar.markdown("## 🌿 QuietSignals")
+st.sidebar.markdown("## QuietSignals")
 st.sidebar.caption("Nurse Burnout Intelligence Platform")
 st.sidebar.divider()
 
@@ -503,7 +491,7 @@ nurse_shift = st.sidebar.selectbox("Shift", ["—", "Day", "Night", "Rotating"])
 
 identified = bool(nurse_name and nurse_id and nurse_dept != "—")
 if identified:
-    st.sidebar.success(f"✓ **{nurse_name}**  \n{nurse_dept} · {nurse_shift} Shift")
+    st.sidebar.success(f"**{nurse_name}**  \n{nurse_dept} · {nurse_shift} Shift")
 else:
     st.sidebar.info("Enter name + ID to enable personalized tracking.")
 
@@ -519,7 +507,7 @@ input_mode = st.sidebar.radio(
 # ═══════════════════════════════════════════════════════════════════════════════
 hcol1, hcol2 = st.columns([3, 1])
 with hcol1:
-    st.markdown("# 🌿 QuietSignals")
+    st.markdown("# QuietSignals")
     st.caption("Real-time burnout risk · Behavioral & physiological signals · Powered by ML")
 with hcol2:
     if identified:
@@ -534,8 +522,7 @@ with hcol2:
 if not GRAYSCALE_AVAILABLE:
     st.warning(
         "deepface / opencv not installed — facial signals use built-in normalizer. "
-        "Run `pip install deepface opencv-python` to enable live webcam analysis.",
-        icon="⚠️",
+        "Run `pip install deepface opencv-python` to enable live webcam analysis."
     )
 
 st.divider()
@@ -544,11 +531,11 @@ st.divider()
 # TABS
 # ═══════════════════════════════════════════════════════════════════════════════
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "🏥 Assessment",
-    "🏢 Department Overview",
-    "👥 Nurse Profiles & Forecast",
-    "📡 Fitbit Live Feed",
-    "🎨 Color Chaos Exercise",
+    "Assessment",
+    "Department Overview",
+    "Nurse Profiles & Forecast",
+    "Fitbit Live Feed",
+    "Color Chaos Exercise",
 ])
 
 # ───────────────────────────────────────────────────────────────────────────────
@@ -564,7 +551,7 @@ with tab1:
             st.markdown("### Behavioral Signals")
             for f in [x for x in FEATURES if not x.startswith("facial")]:
                 sv[f] = st.slider(SIGNALS[f]["label"], 0.0, 1.0, 0.5, 0.01, key=f"m_{f}")
-            st.caption("ℹ Facial signals defaulted to neutral (0.5).")
+            st.caption("Facial signals defaulted to neutral (0.5).")
 
         elif input_mode == "Fitbit":
             st.markdown("### Fitbit Sensor Values")
@@ -581,7 +568,7 @@ with tab1:
                 "sedentary_bouts": sed_bouts, "sleep_onset_variability": sov,
                 "n_awakenings": n_awk,
             }))
-            st.caption("ℹ Facial signals defaulted to neutral (0.5).")
+            st.caption("Facial signals defaulted to neutral (0.5).")
 
         else:  # Manual + Facial
             st.markdown("### Behavioral Signals")
@@ -618,17 +605,17 @@ with tab1:
         # Warning flags
         flags = warning_flags(sv)
         if flags:
-            with st.expander(f"⚠️ Warning Flags — {len(flags)} signal(s) elevated",
+            with st.expander(f"Warning Flags — {len(flags)} signal(s) elevated",
                              expanded=True):
-                for icon, lbl, _sig, val in flags:
-                    _flag_card(icon, f"<strong>{lbl}</strong> &nbsp;— value: {val:.3f}")
+                for marker, lbl, _sig, val in flags:
+                    _flag_card(marker, f"<strong>{lbl}</strong> &nbsp;— value: {val:.3f}")
         else:
-            st.success("✓ No signals are in critically elevated range.", icon="✅")
+            st.success("No signals are in critically elevated range.")
 
         # AI suggestions
         tips = ai_suggestions(sv, label)
         if tips:
-            with st.expander("💡 AI Clinical Suggestions",
+            with st.expander("Clinical Suggestions",
                              expanded=(label != "Low")):
                 for tip in tips:
                     _tip_card(tip)
@@ -640,15 +627,15 @@ with tab1:
         with cc2:
             st.pyplot(radar_chart(sv))
 
-        with st.expander("📊 Signal Contributions"):
+        with st.expander("Signal Contributions"):
             st.pyplot(contribution_chart(sv))
 
-        with st.expander("📋 Raw Signal Values"):
+        with st.expander("Raw Signal Values"):
             rows = []
             for f in FEATURES:
                 v      = sv[f]
                 contrib = (1 - v if SIGNALS[f]["inverse"] else v) * SIGNALS[f]["weight"]
-                status  = "🔴" if contrib > 0.08 else ("🟡" if contrib > 0.04 else "🟢")
+                status  = "High" if contrib > 0.08 else ("Moderate" if contrib > 0.04 else "Low")
                 rows.append({
                     "Signal":       SIGNALS[f]["label"],
                     "Value":        f"{v:.3f}",
@@ -688,9 +675,9 @@ with tab2:
     m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("Total Nurses",     total)
     m2.metric("Hospital Avg Score", f"{avg_s:.3f}")
-    m3.metric("🔴 High Risk",     n_high,  f"{n_high/total:.0%} of staff")
-    m4.metric("🟡 Moderate Risk", n_mod,   f"{n_mod/total:.0%} of staff")
-    m5.metric("🟢 Low Risk",      n_low,   f"{n_low/total:.0%} of staff")
+    m3.metric("High Risk",     n_high,  f"{n_high/total:.0%} of staff")
+    m4.metric("Moderate Risk", n_mod,   f"{n_mod/total:.0%} of staff")
+    m5.metric("Low Risk",      n_low,   f"{n_low/total:.0%} of staff")
 
     st.divider()
 
@@ -701,8 +688,8 @@ with tab2:
         st.markdown("#### Department Risk Summary")
         display = dept_stats.rename(columns={
             "department": "Dept", "n_nurses": "Nurses",
-            "avg_score": "Avg Score", "n_high": "🔴 High",
-            "n_moderate": "🟡 Mod", "n_low": "🟢 Low",
+            "avg_score": "Avg Score", "n_high": "High",
+            "n_moderate": "Moderate", "n_low": "Low",
         })
         st.dataframe(display, use_container_width=True, hide_index=True)
 
@@ -745,7 +732,7 @@ with tab3:
             f"ID: {row['id']} &nbsp;·&nbsp; {row['department']} &nbsp;·&nbsp; {row['shift']} Shift "
             f"&nbsp;·&nbsp; {row['years_exp']} yrs experience</span><br>"
             f"<span style='color:{rfg};font-weight:600'>"
-            f"● {row['risk_level']} Risk &nbsp;|&nbsp; Score: {row['current_score']:.3f}"
+            f"{row['risk_level']} Risk &nbsp;|&nbsp; Score: {row['current_score']:.3f}"
             f"</span></div>",
             unsafe_allow_html=True,
         )
@@ -805,7 +792,7 @@ with tab3:
 # TAB 4 · FITBIT LIVE FEED
 # ───────────────────────────────────────────────────────────────────────────────
 with tab4:
-    st.markdown("### 📡 Fitbit Live Feed")
+    st.markdown("### Fitbit Live Feed")
     st.caption("Simulated real-time data stream — mirrors TILES-2018 / Fitbit Charge 2 API structure")
 
     if "ftick" not in st.session_state:
@@ -813,7 +800,7 @@ with tab4:
 
     col_btn, col_auto = st.columns([1, 2])
     with col_btn:
-        if st.button("🔄 Fetch New Reading"):
+        if st.button("Fetch New Reading"):
             st.session_state.ftick += 1
     with col_auto:
         auto = st.checkbox("Auto-refresh every 4 s (live simulation)")
@@ -902,128 +889,151 @@ with tab4:
         st.rerun()
 
 # ───────────────────────────────────────────────────────────────────────────────
-# TAB 5 · COLOR CHAOS EXERCISE  (Stroop attention test)
+# TAB 5 · COLOR CHAOS EXERCISE
 # ───────────────────────────────────────────────────────────────────────────────
 with tab5:
-    st.markdown("### 🎨 Color Chaos Exercise")
+    st.markdown("### Color Chaos Exercise")
     st.markdown(
-        "This **Stroop-based attention test** measures cognitive interference resistance — "
-        "a validated indicator of burnout-related attention fatigue.  \n"
-        "You will see a **color word** displayed in a **mismatched font color**.  \n"
-        "Click the **font color** (what you see), not the word's meaning.  \n"
-        "10 trials · results map to your _Color Chaos_ burnout signal."
+        "This two-part exercise measures **color negativity** (emotional color associations) "
+        "and **stroke irregularity** (motor timing regularity as a proxy for psychomotor fatigue).  \n"
+        "Results map to the _Color-Pattern Chaos_ burnout signal."
     )
 
-    STROOP = {
-        "RED":    "#ef4444",
-        "BLUE":   "#3b82f6",
-        "GREEN":  "#22c55e",
-        "YELLOW": "#eab308",
-        "PURPLE": "#a855f7",
+    # Color palette with psychological negativity scores (0 = positive, 1 = negative)
+    COLOR_PALETTE = {
+        "Black":       {"hex": "#1a1a1a", "neg": 0.90},
+        "Dark Gray":   {"hex": "#6b7280", "neg": 0.75},
+        "Navy":        {"hex": "#1e3a5f", "neg": 0.70},
+        "Dark Purple": {"hex": "#6b21a8", "neg": 0.65},
+        "Brown":       {"hex": "#92400e", "neg": 0.58},
+        "Red":         {"hex": "#dc2626", "neg": 0.55},
+        "White":       {"hex": "#d1d5db", "neg": 0.50},
+        "Light Blue":  {"hex": "#38bdf8", "neg": 0.35},
+        "Pink":        {"hex": "#f472b6", "neg": 0.28},
+        "Green":       {"hex": "#16a34a", "neg": 0.20},
+        "Orange":      {"hex": "#f97316", "neg": 0.12},
+        "Yellow":      {"hex": "#eab308", "neg": 0.08},
     }
-    TOTAL = 10
+    TAP_COUNT = 10
 
-    def _new_trial():
-        word  = random.choice(list(STROOP))
-        color = random.choice([k for k in STROOP if k != word])
-        return word, color
-
-    # Session-state init
-    _ss_defaults = {
-        "sx_started": False, "sx_finished": False,
-        "sx_round": 0, "sx_correct": 0,
-        "sx_word": None, "sx_color": None,
-        "sx_t0": None, "sx_times": [],
-        "sx_last": None,
+    _cc_defaults = {
+        "cc_phase":           0,    # 0=intro, 1=color selection, 2=tap test, 3=results
+        "cc_selected_colors": [],
+        "cc_tap_times":       [],
+        "cc_color_neg":       None,
+        "cc_stroke_irr":      None,
     }
-    for k, v in _ss_defaults.items():
+    for k, v in _cc_defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
 
-    ss = st.session_state  # shorthand
+    cc = st.session_state
 
-    if not ss.sx_started and not ss.sx_finished:
-        st.info("Press **Start** to begin the 10-trial attention assessment.", icon="🎯")
-        if st.button("▶ Start Color Chaos Exercise", type="primary"):
-            w, c = _new_trial()
-            ss.sx_started, ss.sx_finished = True, False
-            ss.sx_round = ss.sx_correct = 0
-            ss.sx_times, ss.sx_last = [], None
-            ss.sx_word, ss.sx_color = w, c
-            ss.sx_t0 = time.time()
+    if cc.cc_phase == 0:
+        st.info("Press Start to begin the two-part exercise.")
+        if st.button("Start Color Chaos Exercise", type="primary"):
+            cc.cc_phase           = 1
+            cc.cc_selected_colors = []
+            cc.cc_tap_times       = []
+            cc.cc_color_neg       = None
+            cc.cc_stroke_irr      = None
             st.rerun()
 
-    elif ss.sx_started and not ss.sx_finished:
-        st.progress(ss.sx_round / TOTAL,
-                    text=f"Trial {ss.sx_round + 1} of {TOTAL}")
-
-        if ss.sx_last is True:
-            st.success("✓ Correct!", icon="✅")
-        elif ss.sx_last is False:
-            st.error("✗ Incorrect", icon="❌")
-
-        hex_c = STROOP[ss.sx_color]
+    elif cc.cc_phase == 1:
+        st.markdown("#### Part 1 of 2 — Color Negativity")
         st.markdown(
-            f"<div style='text-align:center;padding:2.5rem 1rem;margin:1rem 0;"
-            f"background:{C['chart_bg']};border-radius:16px;"
-            f"border:2px solid {C['border']}'>"
-            f"<span style='font-size:5.5rem;font-weight:900;color:{hex_c};"
-            f"letter-spacing:.15em'>{ss.sx_word}</span><br>"
-            f"<p style='color:{C['muted']};font-size:.9rem;margin-top:.6rem'>"
-            f"What COLOR is the text? (ignore the word)</p>"
+            "Select up to **5 colors** from the palette below that best represent "
+            "your current emotional state, then click **Next**."
+        )
+
+        cols = st.columns(4)
+        for i, (cname, cdata) in enumerate(COLOR_PALETTE.items()):
+            with cols[i % 4]:
+                selected = cname in cc.cc_selected_colors
+                border   = f"3px solid {C['teal']}" if selected else f"1px solid {C['border']}"
+                st.markdown(
+                    f"<div style='background:{cdata['hex']};height:48px;border-radius:8px;"
+                    f"border:{border};margin-bottom:4px'></div>",
+                    unsafe_allow_html=True,
+                )
+                label_prefix = "[selected] " if selected else ""
+                if st.button(
+                    f"{label_prefix}{cname}",
+                    key=f"cc_color_{cname}",
+                    use_container_width=True,
+                ):
+                    if selected:
+                        cc.cc_selected_colors.remove(cname)
+                    elif len(cc.cc_selected_colors) < 5:
+                        cc.cc_selected_colors.append(cname)
+                    st.rerun()
+
+        st.caption(f"{len(cc.cc_selected_colors)} / 5 colors selected.")
+
+        if st.button(
+            "Next: Stroke Irregularity Test",
+            type="primary",
+            disabled=(len(cc.cc_selected_colors) == 0),
+        ):
+            neg_scores      = [COLOR_PALETTE[c]["neg"] for c in cc.cc_selected_colors]
+            cc.cc_color_neg = round(float(np.mean(neg_scores)), 4)
+            cc.cc_phase     = 2
+            cc.cc_tap_times = []
+            st.rerun()
+
+    elif cc.cc_phase == 2:
+        taps_done = len(cc.cc_tap_times)
+        st.markdown("#### Part 2 of 2 — Stroke Irregularity")
+        st.progress(taps_done / TAP_COUNT, text=f"Tap {taps_done + 1} of {TAP_COUNT}")
+        st.markdown(
+            f"<div style='text-align:center;padding:1.2rem;background:{C['chart_bg']};"
+            f"border-radius:12px;border:1px solid {C['border']};margin:1rem 0'>"
+            f"<p style='color:#374151;margin:0'>Tap the button below at a steady, consistent pace "
+            f"— aim for approximately one tap per second.</p>"
             f"</div>",
             unsafe_allow_html=True,
         )
 
-        btn_cols = st.columns(len(STROOP))
-        for i, (cname, chex) in enumerate(STROOP.items()):
-            with btn_cols[i]:
-                if st.button(cname, key=f"sb_{cname}_{ss.sx_round}",
-                             use_container_width=True):
-                    elapsed = time.time() - ss.sx_t0
-                    correct = (cname == ss.sx_color)
-                    ss.sx_times.append(round(elapsed, 2))
-                    if correct:
-                        ss.sx_correct += 1
-                    ss.sx_last  = correct
-                    ss.sx_round += 1
-                    if ss.sx_round >= TOTAL:
-                        ss.sx_finished = True
-                        ss.sx_started  = False
+        _, col_m, _ = st.columns([1, 2, 1])
+        with col_m:
+            if st.button("TAP", type="primary", use_container_width=True):
+                cc.cc_tap_times.append(time.time())
+                if len(cc.cc_tap_times) >= TAP_COUNT:
+                    intervals = [
+                        cc.cc_tap_times[i + 1] - cc.cc_tap_times[i]
+                        for i in range(len(cc.cc_tap_times) - 1)
+                    ]
+                    if len(intervals) >= 2:
+                        cv = float(np.std(intervals) / np.mean(intervals))
+                        cc.cc_stroke_irr = round(float(np.clip(cv / 0.8, 0.0, 1.0)), 4)
                     else:
-                        w2, c2 = _new_trial()
-                        ss.sx_word, ss.sx_color = w2, c2
-                        ss.sx_t0 = time.time()
-                    st.rerun()
+                        cc.cc_stroke_irr = 0.5
+                    cc.cc_phase = 3
+                st.rerun()
 
-    elif ss.sx_finished:
-        accuracy = ss.sx_correct / TOTAL
-        avg_rt   = float(np.mean(ss.sx_times)) if ss.sx_times else 2.0
+    elif cc.cc_phase == 3:
+        color_neg  = cc.cc_color_neg  or 0.5
+        stroke_irr = cc.cc_stroke_irr or 0.5
+        chaos_signal = round(0.5 * color_neg + 0.5 * stroke_irr, 4)
 
-        # Map performance → chaos signal (higher chaos = worse attention)
-        if accuracy >= 0.90 and avg_rt < 3.0:
-            interp       = "Excellent cognitive control"
-            interp_sub   = "Low cognitive fatigue — attention circuits intact"
-            chaos_signal = max(0.05, 0.2 - (accuracy - 0.9) * 2)
-            risk_lbl     = "Low"
-        elif accuracy >= 0.70:
-            interp       = "Moderate attention performance"
-            interp_sub   = "Some cognitive interference detected — monitor weekly"
-            chaos_signal = 0.45
-            risk_lbl     = "Moderate"
+        if chaos_signal < 0.33:
+            risk_lbl   = "Low"
+            interp     = "Low psychomotor and emotional distress indicators"
+            interp_sub = "Motor timing is consistent and color associations are positive."
+        elif chaos_signal < 0.55:
+            risk_lbl   = "Moderate"
+            interp     = "Moderate irregularity detected"
+            interp_sub = "Some elevation in color negativity or stroke variance — monitor weekly."
         else:
-            interp       = "Attention difficulty detected"
-            interp_sub   = "High cognitive fatigue — significant burnout indicator"
-            chaos_signal = 0.78
-            risk_lbl     = "High"
+            risk_lbl   = "High"
+            interp     = "Elevated stroke irregularity and/or color negativity"
+            interp_sub = "Significant psychomotor and emotional distress indicators present."
 
         st.markdown("#### Exercise Results")
         rc1, rc2, rc3 = st.columns(3)
-        rc1.metric("Accuracy",           f"{accuracy:.0%}",
-                   f"{ss.sx_correct}/{TOTAL} correct")
-        rc2.metric("Avg Response Time",  f"{avg_rt:.2f} s", "Lower = sharper")
-        rc3.metric("Color Chaos Signal", f"{chaos_signal:.2f}",
-                   f"{risk_lbl} fatigue zone")
+        rc1.metric("Color Negativity",    f"{color_neg:.2f}",   "Scale 0–1")
+        rc2.metric("Stroke Irregularity", f"{stroke_irr:.2f}",  "Scale 0–1")
+        rc3.metric("Color Chaos Signal",  f"{chaos_signal:.2f}", f"{risk_lbl} zone")
 
         rfg = RISK_COLOR[risk_lbl]
         rbg = RISK_BG[risk_lbl]
@@ -1031,22 +1041,34 @@ with tab5:
         st.markdown(
             f"<div style='background:{rbg};border:2px solid {rbd};"
             f"border-radius:14px;padding:16px 20px;margin:.8rem 0'>"
-            f"<strong style='color:{rfg};font-size:1.1rem'>● {interp}</strong><br>"
+            f"<strong style='color:{rfg};font-size:1.1rem'>{interp}</strong><br>"
             f"<span style='color:{C['muted']}'>{interp_sub}</span>"
             f"</div>",
             unsafe_allow_html=True,
         )
 
-        st.pyplot(stroop_result_chart(ss.sx_correct, TOTAL, ss.sx_times))
+        if cc.cc_selected_colors:
+            st.markdown("**Colors selected:**")
+            swatch_cols = st.columns(len(cc.cc_selected_colors))
+            for i, cname in enumerate(cc.cc_selected_colors):
+                with swatch_cols[i]:
+                    st.markdown(
+                        f"<div style='background:{COLOR_PALETTE[cname]['hex']};"
+                        f"height:40px;border-radius:6px;margin-bottom:4px'></div>"
+                        f"<p style='text-align:center;font-size:.8rem;"
+                        f"color:{C['muted']}'>{cname}</p>",
+                        unsafe_allow_html=True,
+                    )
+
+        if len(cc.cc_tap_times) > 1:
+            st.pyplot(tap_interval_chart(cc.cc_tap_times))
 
         st.info(
-            f"**What this means:** Your Color Chaos signal is estimated at "
-            f"**{chaos_signal:.2f}** (scale 0–1). This can be entered manually into "
-            f"the Assessment tab under _Color-Pattern Chaos_ to personalise your score.",
-            icon="ℹ️",
+            f"Your Color Chaos signal is estimated at **{chaos_signal:.2f}** (scale 0–1). "
+            f"Enter this value in the Assessment tab under _Color-Pattern Chaos_ to personalise your score."
         )
 
-        if st.button("🔄 Retake Exercise"):
-            for k in list(_ss_defaults.keys()):
+        if st.button("Retake Exercise"):
+            for k in list(_cc_defaults.keys()):
                 del st.session_state[k]
             st.rerun()

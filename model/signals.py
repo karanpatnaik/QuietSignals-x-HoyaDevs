@@ -24,7 +24,7 @@ SIGNALS = {
     "voice_monotony":          {"label": "Voice Monotony Index",           "weight": 0.13, "inverse": False},
     "gait_irregularity":       {"label": "Gait Irregularity",              "weight": 0.10, "inverse": False},
     "patient_rel":             {"label": "Patient Relationship Quality",   "weight": 0.10, "inverse": True},
-    "color_chaos":             {"label": "Color-Pattern Chaos",            "weight": 0.09, "inverse": False},
+    "color_chaos":             {"label": "Stroke Irregularity / Color Negativity", "weight": 0.09, "inverse": False},
     "tiktok_burnout":          {"label": "TikTok Burnout Signal",          "weight": 0.08, "inverse": False},
     # --- Facial emotion signals (from grayscale.py / DeepFace) ---
     "facial_negative_load":    {"label": "Facial Negative Emotion Load",   "weight": 0.10, "inverse": False},
