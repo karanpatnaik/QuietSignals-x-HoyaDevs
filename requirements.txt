@@ -4,5 +4,6 @@ matplotlib
 scikit-learn
 scipy
 seaborn
+streamlit>=1.32.0
 deepface
 opencv-python

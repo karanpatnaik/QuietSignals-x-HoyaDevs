@@ -13,7 +13,10 @@
       "Bash(TF_USE_LEGACY_KERAS=1 python -c \"import tensorflow as tf; print\\('tf ok', tf.__version__\\)\")",
       "Bash(TF_USE_LEGACY_KERAS=1 python -c \"from deepface import DeepFace; print\\('deepface ok'\\)\")",
       "Bash(TF_USE_LEGACY_KERAS=1 python -c \"import tensorflow as tf; print\\('tf', tf.__version__\\)\")",
-      "Bash(pip uninstall:*)"
+      "Bash(pip uninstall:*)",
+      "Bash(git push:*)",
+      "Bash(file /Users/karanpatnaik/Documents/GitHub/QuietSignals-x-HoyaDevs/outputs/*.png)",
+      "Bash(git add:*)"
     ]
   }
 }
