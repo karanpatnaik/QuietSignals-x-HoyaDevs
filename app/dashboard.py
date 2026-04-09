@@ -1,7 +1,6 @@
 import sys
 import os
 import time
-import random
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -422,28 +421,28 @@ def warning_flags(sv: dict) -> list:
 def ai_suggestions(sv: dict, label: str) -> list:
     """Rule-based clinical suggestions derived from signal values."""
     tips = []
-    if sv.get("gsr", 0) > 0.65:
+    if sv.get("gsr", SIGNAL_NEUTRAL) > 0.65:
         tips.append("Practice 4-7-8 guided breathing between patient interactions to dampen sympathetic activation.")
-    if sv.get("task_switch", 0) > 0.65:
+    if sv.get("task_switch", SIGNAL_NEUTRAL) > 0.65:
         tips.append("Discuss task batching with charge nurse — grouped documentation reduces cognitive interrupt load.")
-    if sv.get("voice_monotony", 0) > 0.60:
+    if sv.get("voice_monotony", SIGNAL_NEUTRAL) > 0.60:
         tips.append("Schedule brief daily peer check-ins. Vocal social engagement reduces emotional disengagement.")
-    if sv.get("gait_irregularity", 0) > 0.60:
+    if sv.get("gait_irregularity", SIGNAL_NEUTRAL) > 0.60:
         tips.append("Check hydration levels and footwear fit. Irregular gait may indicate fatigue or musculoskeletal strain.")
     if sv.get("patient_rel", SIGNAL_NEUTRAL) < 0.35:
         tips.append("Patient relationship quality is declining — consider EAP referral for compassion fatigue support.")
-    if sv.get("color_chaos", 0) > 0.65:
+    if sv.get("color_chaos", SIGNAL_NEUTRAL) > 0.65:
         tips.append("Elevated stroke irregularity and color negativity detected. Consider a short break, hydration check, and stress-reduction activity before next patient interaction.")
-    if sv.get("tiktok_burnout", 0) > 0.65:
+    if sv.get("tiktok_burnout", SIGNAL_NEUTRAL) > 0.65:
         tips.append("High sleep disruption detected. Reduce screen time 1 hr before sleep; consider a sleep diary.")
-    if sv.get("facial_negative_load", 0) > 0.55:
+    if sv.get("facial_negative_load", SIGNAL_NEUTRAL) > 0.55:
         tips.append("Elevated negative emotional expression detected. Mental health check-in or EAP consultation recommended.")
-    if sv.get("facial_flat_affect", 0) > 0.55:
+    if sv.get("facial_flat_affect", SIGNAL_NEUTRAL) > 0.55:
         tips.append("Reduced emotional expressivity may indicate depersonalization — consider peer support or engagement program.")
     if label == "High":
-        tips.insert(0, "PRIORITY: Notify charge nurse / unit manager for an immediate well-being check-in.")
+        tips.insert(0, "Notify charge nurse / unit manager for an immediate well-being check-in.")
         if not tips[1:]:
-            tips.append("Multiple elevated signals. Recommend temporary workload reduction and structured recovery plan.")
+            tips.append("Multiple signals elevated. Recommend temporary workload reduction and structured recovery plan.")
     elif label == "Moderate" and not tips:
         tips.append("Monitor weekly. Focus on sleep consistency, adequate recovery time, and peer connection.")
     elif label == "Low" and not tips:
@@ -460,17 +459,15 @@ def _flag_card(marker, text, color="#fef2f2", border="#fca5a5", text_color="#991
     )
 
 
-def _tip_card(tip):
-    is_priority = tip.startswith("PRIORITY") or tip.startswith("ATTENTION")
+def _tip_card(tip, priority=False):
     bg, bd, tc = (
-        ("#fef2f2", "#fca5a5", "#991b1b") if is_priority
+        ("#fef2f2", "#fca5a5", "#991b1b") if priority
         else ("#f0fdf4", "#86efac", "#166534")
     )
-    prefix = "Priority: " if is_priority else ""
     st.markdown(
         f"<div style='background:{bg};border:1px solid {bd};"
         f"border-radius:8px;padding:8px 12px;margin:5px 0;"
-        f"font-size:.85rem;color:{tc}'>{prefix}{tip}</div>",
+        f"font-size:.85rem;color:{tc}'>{tip}</div>",
         unsafe_allow_html=True,
     )
 
@@ -617,8 +614,8 @@ with tab1:
         if tips:
             with st.expander("Clinical Suggestions",
                              expanded=(label != "Low")):
-                for tip in tips:
-                    _tip_card(tip)
+                for i, tip in enumerate(tips):
+                    _tip_card(tip, priority=(label == "High" and i == 0))
 
         # Charts: probability bar + radar side-by-side
         cc1, cc2 = st.columns(2)

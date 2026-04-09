@@ -98,7 +98,8 @@ def fitbit_to_signals(row):
         rhr = get("resting_hr", 70)
         task_switch = clip((rhr - 58) / 18)
 
-    # color_chaos: irregular sleep schedule → cognitive/perceptual chaos
+    # color_chaos: sleep onset variability used as a proxy for psychomotor/perceptual chaos
+    # (direct measurement via the Color Chaos Exercise in the dashboard is preferred)
     # sleep_onset_variability range: 0.1 (regular) to 2.0 (highly irregular)
     sov = get("sleep_onset_variability", None)
     if sov is not None:
