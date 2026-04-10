@@ -979,34 +979,38 @@ with tab5:
             st.rerun()
 
     elif cc.cc_phase == 2:
-        taps_done = len(cc.cc_tap_times)
-        st.markdown("#### Part 2 of 2 — Stroke Irregularity")
-        st.progress(taps_done / TAP_COUNT, text=f"Tap {taps_done + 1} of {TAP_COUNT}")
-        st.markdown(
-            f"<div style='text-align:center;padding:1.2rem;background:{C['chart_bg']};"
-            f"border-radius:12px;border:1px solid {C['border']};margin:1rem 0'>"
-            f"<p style='color:#374151;margin:0'>Tap the button below at a steady, consistent pace "
-            f"— aim for approximately one tap per second.</p>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
+        @st.fragment
+        def _tap_fragment():
+            ss = st.session_state
+            taps_done = len(ss.cc_tap_times)
+            st.markdown("#### Part 2 of 2 — Stroke Irregularity")
+            st.progress(taps_done / TAP_COUNT, text=f"Tap {taps_done + 1} of {TAP_COUNT}")
+            st.markdown(
+                f"<div style='text-align:center;padding:1.2rem;background:{C['chart_bg']};"
+                f"border-radius:12px;border:1px solid {C['border']};margin:1rem 0'>"
+                f"<p style='color:#374151;margin:0'>Tap the button below at a steady, consistent pace "
+                f"— aim for approximately one tap per second.</p>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
 
-        _, col_m, _ = st.columns([1, 2, 1])
-        with col_m:
-            if st.button("TAP", type="primary", use_container_width=True):
-                cc.cc_tap_times.append(time.time())
-                if len(cc.cc_tap_times) >= TAP_COUNT:
-                    intervals = [
-                        cc.cc_tap_times[i + 1] - cc.cc_tap_times[i]
-                        for i in range(len(cc.cc_tap_times) - 1)
-                    ]
-                    if len(intervals) >= 2:
-                        cv = float(np.std(intervals) / np.mean(intervals))
-                        cc.cc_stroke_irr = round(float(np.clip(cv / 0.8, 0.0, 1.0)), 4)
-                    else:
-                        cc.cc_stroke_irr = 0.5
-                    cc.cc_phase = 3
-                st.rerun()
+            _, col_m, _ = st.columns([1, 2, 1])
+            with col_m:
+                if st.button("TAP", type="primary", use_container_width=True):
+                    ss.cc_tap_times.append(time.time())
+                    if len(ss.cc_tap_times) >= TAP_COUNT:
+                        intervals = [
+                            ss.cc_tap_times[i + 1] - ss.cc_tap_times[i]
+                            for i in range(len(ss.cc_tap_times) - 1)
+                        ]
+                        if len(intervals) >= 2:
+                            cv = float(np.std(intervals) / np.mean(intervals))
+                            ss.cc_stroke_irr = round(float(np.clip(cv / 0.8, 0.0, 1.0)), 4)
+                        else:
+                            ss.cc_stroke_irr = 0.5
+                        ss.cc_phase = 3
+                        st.rerun(scope="app")
+        _tap_fragment()
 
     elif cc.cc_phase == 3:
         color_neg  = cc.cc_color_neg  or 0.5

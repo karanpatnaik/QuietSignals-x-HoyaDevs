@@ -16,7 +16,10 @@
       "Bash(pip uninstall:*)",
       "Bash(git push:*)",
       "Bash(file /Users/karanpatnaik/Documents/GitHub/QuietSignals-x-HoyaDevs/outputs/*.png)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(python3 -m py_compile app/dashboard.py model/*.py)",
+      "Bash(python3 -c ':*)"
     ]
   }
 }
