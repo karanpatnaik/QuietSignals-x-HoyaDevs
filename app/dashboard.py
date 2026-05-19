@@ -1,6 +1,8 @@
 import sys
 import os
 import time
+import sqlite3
+import pathlib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -71,6 +73,12 @@ st.markdown("""
     .stTabs [data-baseweb="tab-list"]{background:#f0fdf4;border-radius:12px;padding:4px}
     .stTabs [data-baseweb="tab"]{border-radius:8px;padding:8px 16px}
     .stTabs [aria-selected="true"]{background:#0d9488!important;color:#fff!important}
+    .block-container{padding-top:.8rem!important;padding-bottom:.8rem!important}
+    [data-testid="stVerticalBlock"]{gap:.4rem!important}
+    [data-testid="metric-container"]{padding:.55rem .85rem!important}
+    h1{margin-bottom:.15rem!important}
+    h2,h3{margin-bottom:.15rem!important}
+    hr{margin:.4rem 0!important}
 </style>
 """, unsafe_allow_html=True)
 
@@ -134,6 +142,91 @@ def get_nurse_profiles() -> pd.DataFrame:
             "risk_level": score_to_label(cs),
         })
     return pd.DataFrame(profiles)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DATABASE — cross-session persistence
+# ═══════════════════════════════════════════════════════════════════════════════
+
+DB_PATH = pathlib.Path(__file__).parent.parent / "data" / "quietsignals.db"
+
+
+def init_db():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(DB_PATH)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS assessments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nurse_id TEXT NOT NULL,
+            nurse_name TEXT,
+            dept TEXT,
+            shift TEXT,
+            timestamp TEXT NOT NULL,
+            gsr REAL, task_switch REAL, voice_monotony REAL,
+            gait_irregularity REAL, patient_rel REAL, color_chaos REAL,
+            tiktok_burnout REAL, facial_negative_load REAL,
+            facial_flat_affect REAL, facial_positive_protect REAL,
+            composite_score REAL,
+            risk_level TEXT
+        )
+    """)
+    con.commit()
+    con.close()
+
+
+def save_assessment(nurse_id, nurse_name, dept, shift, sv, score, label):
+    con = sqlite3.connect(DB_PATH)
+    con.execute("""
+        INSERT INTO assessments
+        (nurse_id, nurse_name, dept, shift, timestamp,
+         gsr, task_switch, voice_monotony, gait_irregularity, patient_rel,
+         color_chaos, tiktok_burnout, facial_negative_load, facial_flat_affect,
+         facial_positive_protect, composite_score, risk_level)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    """, (
+        nurse_id, nurse_name, dept, shift,
+        pd.Timestamp.now().isoformat(),
+        sv.get("gsr", SIGNAL_NEUTRAL),
+        sv.get("task_switch", SIGNAL_NEUTRAL),
+        sv.get("voice_monotony", SIGNAL_NEUTRAL),
+        sv.get("gait_irregularity", SIGNAL_NEUTRAL),
+        sv.get("patient_rel", SIGNAL_NEUTRAL),
+        sv.get("color_chaos", SIGNAL_NEUTRAL),
+        sv.get("tiktok_burnout", SIGNAL_NEUTRAL),
+        sv.get("facial_negative_load", SIGNAL_NEUTRAL),
+        sv.get("facial_flat_affect", SIGNAL_NEUTRAL),
+        sv.get("facial_positive_protect", SIGNAL_NEUTRAL),
+        score, label,
+    ))
+    con.commit()
+    con.close()
+
+
+def get_nurse_history(nurse_id: str) -> pd.DataFrame:
+    if not DB_PATH.exists():
+        return pd.DataFrame()
+    con = sqlite3.connect(DB_PATH)
+    df = pd.read_sql_query(
+        "SELECT * FROM assessments WHERE nurse_id=? ORDER BY timestamp",
+        con, params=(nurse_id,)
+    )
+    con.close()
+    return df
+
+
+def get_all_saved_nurses() -> pd.DataFrame:
+    if not DB_PATH.exists():
+        return pd.DataFrame(columns=["nurse_id", "nurse_name", "dept", "shift"])
+    con = sqlite3.connect(DB_PATH)
+    df = pd.read_sql_query(
+        "SELECT DISTINCT nurse_id, nurse_name, dept, shift FROM assessments ORDER BY nurse_id",
+        con
+    )
+    con.close()
+    return df
+
+
+init_db()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -527,12 +620,11 @@ st.divider()
 # ═══════════════════════════════════════════════════════════════════════════════
 # TABS
 # ═══════════════════════════════════════════════════════════════════════════════
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4 = st.tabs([
     "Assessment",
     "Department Overview",
-    "Nurse Profiles & Forecast",
+    "Nurse Profiles",
     "Fitbit Live Feed",
-    "Color Chaos Exercise",
 ])
 
 # ───────────────────────────────────────────────────────────────────────────────
@@ -643,6 +735,14 @@ with tab1:
                 })
             st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
+        st.divider()
+        if identified:
+            if st.button("Save Assessment", type="primary", key="save_btn"):
+                save_assessment(nurse_id, nurse_name, nurse_dept, nurse_shift, sv, score, label)
+                st.success(f"Assessment saved for **{nurse_name}** ({nurse_id}). View history in Nurse Profiles.")
+        else:
+            st.caption("Enter nurse name + ID in the sidebar to enable saving.")
+
 # ───────────────────────────────────────────────────────────────────────────────
 # TAB 2 · DEPARTMENT / HOSPITAL OVERVIEW
 # ───────────────────────────────────────────────────────────────────────────────
@@ -705,85 +805,207 @@ with tab2:
     )
 
 # ───────────────────────────────────────────────────────────────────────────────
-# TAB 3 · NURSE PROFILES & BURNOUT FORECAST
+# TAB 3 · NURSE PROFILES
 # ───────────────────────────────────────────────────────────────────────────────
 with tab3:
-    st.markdown("### Nurse Profiles & Burnout Forecasting")
-    profiles = get_nurse_profiles()
+    st.markdown("### Nurse Profiles")
+    profiles_t3    = get_nurse_profiles()
+    saved_nurses   = get_all_saved_nurses()
+
+    # Build combined ID → name map (mock profiles + any DB-only nurses)
+    id_list  = profiles_t3["id"].tolist()
+    name_map = dict(zip(profiles_t3["id"], profiles_t3["name"]))
+    for _, sr in saved_nurses.iterrows():
+        if sr["nurse_id"] not in id_list:
+            id_list.append(sr["nurse_id"])
+            name_map[sr["nurse_id"]] = sr["nurse_name"] or sr["nurse_id"]
 
     sel_col, info_col = st.columns([1, 2])
     with sel_col:
-        selected = st.selectbox("Select Nurse", profiles["name"].tolist())
+        selected_id = st.selectbox(
+            "Select Nurse by ID",
+            id_list,
+            format_func=lambda nid: f"{nid} — {name_map.get(nid, nid)}",
+        )
 
-    row = profiles[profiles["name"] == selected].iloc[0]
+    # Resolve profile data
+    mock_rows    = profiles_t3[profiles_t3["id"] == selected_id]
+    has_mock     = len(mock_rows) > 0
+    db_history   = get_nurse_history(selected_id)
+    has_real     = len(db_history) > 0
 
+    if has_mock:
+        p_row       = mock_rows.iloc[0]
+        p_name      = p_row["name"]
+        p_dept      = p_row["department"]
+        p_shift     = p_row["shift"]
+        p_years     = p_row["years_exp"]
+        p_score     = p_row["current_score"]
+        p_risk      = p_row["risk_level"]
+    elif has_real:
+        last_r      = db_history.iloc[-1]
+        p_name      = last_r.get("nurse_name") or selected_id
+        p_dept      = last_r.get("dept") or "—"
+        p_shift     = last_r.get("shift") or "—"
+        p_years     = None
+        p_score     = last_r["composite_score"]
+        p_risk      = last_r["risk_level"]
+    else:
+        with info_col:
+            st.info("No data found for this ID.")
+        st.stop()
+
+    # Real data overrides mock score/risk
+    if has_real:
+        last_r  = db_history.iloc[-1]
+        p_score = last_r["composite_score"]
+        p_risk  = last_r["risk_level"]
+
+    rfg = RISK_COLOR[p_risk]
+    rbg = RISK_BG[p_risk]
+    rbd = RISK_BORDER[p_risk]
+
+    years_fragment = f"&nbsp;·&nbsp; {p_years} yrs experience" if p_years else ""
+    sessions_note  = (
+        f"&nbsp;·&nbsp; <strong>{len(db_history)} saved session{'s' if len(db_history) != 1 else ''}</strong>"
+        if has_real else "&nbsp;·&nbsp; <em>no saved sessions yet</em>"
+    )
     with info_col:
-        rfg = RISK_COLOR[row["risk_level"]]
-        rbg = RISK_BG[row["risk_level"]]
-        rbd = RISK_BORDER[row["risk_level"]]
         st.markdown(
             f"<div style='background:{rbg};border:2px solid {rbd};"
-            f"border-radius:14px;padding:14px 20px'>"
-            f"<strong style='color:{rfg};font-size:1.1rem'>{row['name']}</strong><br>"
+            f"border-radius:14px;padding:12px 18px'>"
+            f"<strong style='color:{rfg};font-size:1.1rem'>{p_name}</strong><br>"
             f"<span style='color:{C['muted']};font-size:.85rem'>"
-            f"ID: {row['id']} &nbsp;·&nbsp; {row['department']} &nbsp;·&nbsp; {row['shift']} Shift "
-            f"&nbsp;·&nbsp; {row['years_exp']} yrs experience</span><br>"
+            f"ID: {selected_id} &nbsp;·&nbsp; {p_dept} &nbsp;·&nbsp; {p_shift} Shift"
+            f"{years_fragment}{sessions_note}</span><br>"
             f"<span style='color:{rfg};font-weight:600'>"
-            f"{row['risk_level']} Risk &nbsp;|&nbsp; Score: {row['current_score']:.3f}"
+            f"{p_risk} Risk &nbsp;|&nbsp; Score: {p_score:.3f}"
             f"</span></div>",
             unsafe_allow_html=True,
         )
 
     st.divider()
 
-    history = list(row["history"])
-    weeks   = list(range(1, len(history) + 1))
-
-    # Deterministic linear forecast
-    np.random.seed(abs(hash(selected)) % (2 ** 31))
-    coeffs   = np.polyfit(weeks, history, 1)
-    fw       = list(range(len(history) + 1, len(history) + 5))
-    forecast = [
-        float(np.clip(np.polyval(coeffs, w) + np.random.normal(0, 0.03), 0.05, 0.95))
-        for w in fw
-    ]
-    forecast = [round(f, 3) for f in forecast]
-
-    ch_col2, st_col2 = st.columns([1.5, 1])
-    with ch_col2:
-        st.pyplot(trend_chart(weeks, history, forecast))
-    with st_col2:
-        st.markdown("#### 8-Week Statistics")
-        trend_dir = "↑ Worsening" if coeffs[0] > 0.01 else ("↓ Improving" if coeffs[0] < -0.01 else "→ Stable")
-        st.metric("Current Score",    f"{history[-1]:.3f}")
-        st.metric("8-Week Average",   f"{np.mean(history):.3f}")
-        st.metric("Score Trend",      f"{trend_dir}  ({abs(coeffs[0]):.3f}/wk)")
-        st.metric("4-Week Forecast",  f"{forecast[-1]:.3f}",
-                  delta=f"Predicted: {score_to_label(forecast[-1])}")
+    # ── Signal Breakdown ──────────────────────────────────────────────────────
+    st.markdown("#### Burnout Signal Breakdown")
+    if has_real:
+        last_r = db_history.iloc[-1]
+        sig_rows = []
+        for f in FEATURES:
+            v      = float(last_r[f]) if f in last_r.index and pd.notna(last_r[f]) else SIGNAL_NEUTRAL
+            contrib = (1 - v if SIGNALS[f]["inverse"] else v) * SIGNALS[f]["weight"]
+            status  = "High" if contrib > 0.08 else ("Moderate" if contrib > 0.04 else "Low")
+            sig_rows.append({
+                "Signal":       SIGNALS[f]["label"],
+                "Value":        round(v, 3),
+                "Contribution": round(contrib, 4),
+                "Status":       status,
+            })
+        sig_df = pd.DataFrame(sig_rows)
+        st.dataframe(sig_df, use_container_width=True, hide_index=True)
+        st.caption(f"From most recent session: {str(last_r['timestamp'])[:16]}")
+    else:
+        st.info(
+            "No saved assessments yet for this nurse. "
+            "Run an assessment in the **Assessment** tab and click **Save Assessment** to begin building history."
+        )
 
     st.divider()
 
-    st.markdown("#### Department Peer Comparison")
-    peers    = profiles[profiles["department"] == row["department"]]
-    dept_avg = peers["current_score"].mean()
-    pct      = (peers["current_score"] < row["current_score"]).mean()
+    # ── Trend Chart ───────────────────────────────────────────────────────────
+    if has_real:
+        real_scores = db_history["composite_score"].tolist()
+        real_weeks  = list(range(1, len(real_scores) + 1))
+        np.random.seed(abs(hash(selected_id)) % (2 ** 31))
+        if len(real_weeks) >= 2:
+            coeffs   = np.polyfit(real_weeks, real_scores, 1)
+            fw       = list(range(len(real_weeks) + 1, len(real_weeks) + 5))
+            forecast = [
+                float(np.clip(np.polyval(coeffs, w) + np.random.normal(0, 0.03), 0.05, 0.95))
+                for w in fw
+            ]
+            forecast = [round(f, 3) for f in forecast]
+        else:
+            coeffs   = [0, real_scores[0]]
+            forecast = None
 
-    pc1, pc2 = st.columns(2)
-    pc1.metric(f"{row['department']} Dept Avg",
-               f"{dept_avg:.3f}",
-               delta=f"This nurse {'above' if row['current_score'] > dept_avg else 'below'} avg")
-    pc2.metric("Dept Burnout Percentile",
-               f"{pct:.0%}",
-               help="% of dept peers with a lower burnout score")
+        st.markdown("#### Burnout Score Trend — Real Sessions")
+        ch_col2, st_col2 = st.columns([1.5, 1])
+        with ch_col2:
+            st.pyplot(trend_chart(real_weeks, real_scores, forecast))
+        with st_col2:
+            st.markdown("#### Session Statistics")
+            trend_dir = "↑ Worsening" if coeffs[0] > 0.01 else ("↓ Improving" if coeffs[0] < -0.01 else "→ Stable")
+            st.metric("Latest Score",      f"{real_scores[-1]:.3f}")
+            st.metric("Session Average",   f"{np.mean(real_scores):.3f}")
+            if len(real_weeks) >= 2:
+                st.metric("Trend",         f"{trend_dir}  ({abs(coeffs[0]):.3f}/session)")
+            if forecast:
+                st.metric("4-Session Forecast", f"{forecast[-1]:.3f}",
+                          delta=f"Predicted: {score_to_label(forecast[-1])}")
 
-    with st.expander(f"All {row['department']} nurses ({len(peers)})"):
-        st.dataframe(
-            peers[["name", "shift", "years_exp", "current_score", "risk_level"]].rename(
-                columns={"name": "Name", "shift": "Shift", "years_exp": "Yrs Exp",
-                         "current_score": "Score", "risk_level": "Risk"}
-            ).sort_values("Score", ascending=False),
-            use_container_width=True, hide_index=True,
-        )
+        if len(db_history) > 1:
+            with st.expander(f"Full Session History ({len(db_history)} sessions)"):
+                display_cols = ["timestamp", "composite_score", "risk_level"] + FEATURES
+                avail        = [c for c in display_cols if c in db_history.columns]
+                hist_disp    = db_history[avail].copy()
+                hist_disp["timestamp"] = hist_disp["timestamp"].str[:16]
+                hist_disp = hist_disp.rename(columns={
+                    "timestamp": "Date/Time", "composite_score": "Score", "risk_level": "Risk"
+                })
+                st.dataframe(hist_disp, use_container_width=True, hide_index=True)
+
+    else:
+        # Fall back to mock trend
+        mock_history = list(p_row["history"]) if has_mock else [0.5] * 8
+        mock_weeks   = list(range(1, len(mock_history) + 1))
+        np.random.seed(abs(hash(selected_id)) % (2 ** 31))
+        coeffs   = np.polyfit(mock_weeks, mock_history, 1)
+        fw       = list(range(len(mock_history) + 1, len(mock_history) + 5))
+        forecast = [
+            float(np.clip(np.polyval(coeffs, w) + np.random.normal(0, 0.03), 0.05, 0.95))
+            for w in fw
+        ]
+        forecast = [round(f, 3) for f in forecast]
+
+        st.markdown("#### Burnout Score Trend — Simulated (no saved sessions yet)")
+        ch_col2, st_col2 = st.columns([1.5, 1])
+        with ch_col2:
+            st.pyplot(trend_chart(mock_weeks, mock_history, forecast))
+        with st_col2:
+            st.markdown("#### 8-Week Statistics")
+            trend_dir = "↑ Worsening" if coeffs[0] > 0.01 else ("↓ Improving" if coeffs[0] < -0.01 else "→ Stable")
+            st.metric("Current Score",   f"{mock_history[-1]:.3f}")
+            st.metric("8-Week Average",  f"{np.mean(mock_history):.3f}")
+            st.metric("Score Trend",     f"{trend_dir}  ({abs(coeffs[0]):.3f}/wk)")
+            st.metric("4-Week Forecast", f"{forecast[-1]:.3f}",
+                      delta=f"Predicted: {score_to_label(forecast[-1])}")
+
+    st.divider()
+
+    # ── Dept Peer Comparison ──────────────────────────────────────────────────
+    if p_dept and p_dept != "—" and p_dept in profiles_t3["department"].values:
+        st.markdown("#### Department Peer Comparison")
+        peers    = profiles_t3[profiles_t3["department"] == p_dept]
+        dept_avg = peers["current_score"].mean()
+        pct      = (peers["current_score"] < p_score).mean()
+
+        pc1, pc2 = st.columns(2)
+        pc1.metric(f"{p_dept} Dept Avg",
+                   f"{dept_avg:.3f}",
+                   delta=f"This nurse {'above' if p_score > dept_avg else 'below'} avg")
+        pc2.metric("Dept Burnout Percentile",
+                   f"{pct:.0%}",
+                   help="% of dept peers with a lower burnout score")
+
+        with st.expander(f"All {p_dept} nurses ({len(peers)})"):
+            st.dataframe(
+                peers[["name", "shift", "years_exp", "current_score", "risk_level"]].rename(
+                    columns={"name": "Name", "shift": "Shift", "years_exp": "Yrs Exp",
+                             "current_score": "Score", "risk_level": "Risk"}
+                ).sort_values("Score", ascending=False),
+                use_container_width=True, hide_index=True,
+            )
 
 # ───────────────────────────────────────────────────────────────────────────────
 # TAB 4 · FITBIT LIVE FEED
@@ -885,191 +1107,5 @@ with tab4:
         st.session_state.ftick += 1
         st.rerun()
 
-# ───────────────────────────────────────────────────────────────────────────────
-# TAB 5 · COLOR CHAOS EXERCISE
-# ───────────────────────────────────────────────────────────────────────────────
-with tab5:
-    st.markdown("### Color Chaos Exercise")
-    st.markdown(
-        "This two-part exercise measures **color negativity** (emotional color associations) "
-        "and **stroke irregularity** (motor timing regularity as a proxy for psychomotor fatigue).  \n"
-        "Results map to the _Color-Pattern Chaos_ burnout signal."
-    )
-
-    # Color palette with psychological negativity scores (0 = positive, 1 = negative)
-    COLOR_PALETTE = {
-        "Black":       {"hex": "#1a1a1a", "neg": 0.90},
-        "Dark Gray":   {"hex": "#6b7280", "neg": 0.75},
-        "Navy":        {"hex": "#1e3a5f", "neg": 0.70},
-        "Dark Purple": {"hex": "#6b21a8", "neg": 0.65},
-        "Brown":       {"hex": "#92400e", "neg": 0.58},
-        "Red":         {"hex": "#dc2626", "neg": 0.55},
-        "White":       {"hex": "#d1d5db", "neg": 0.50},
-        "Light Blue":  {"hex": "#38bdf8", "neg": 0.35},
-        "Pink":        {"hex": "#f472b6", "neg": 0.28},
-        "Green":       {"hex": "#16a34a", "neg": 0.20},
-        "Orange":      {"hex": "#f97316", "neg": 0.12},
-        "Yellow":      {"hex": "#eab308", "neg": 0.08},
-    }
-    TAP_COUNT = 10
-
-    _cc_defaults = {
-        "cc_phase":           0,    # 0=intro, 1=color selection, 2=tap test, 3=results
-        "cc_selected_colors": [],
-        "cc_tap_times":       [],
-        "cc_color_neg":       None,
-        "cc_stroke_irr":      None,
-    }
-    for k, v in _cc_defaults.items():
-        if k not in st.session_state:
-            st.session_state[k] = v
-
-    cc = st.session_state
-
-    if cc.cc_phase == 0:
-        st.info("Press Start to begin the two-part exercise.")
-        if st.button("Start Color Chaos Exercise", type="primary"):
-            cc.cc_phase           = 1
-            cc.cc_selected_colors = []
-            cc.cc_tap_times       = []
-            cc.cc_color_neg       = None
-            cc.cc_stroke_irr      = None
-            st.rerun()
-
-    elif cc.cc_phase == 1:
-        st.markdown("#### Part 1 of 2 — Color Negativity")
-        st.markdown(
-            "Select up to **5 colors** from the palette below that best represent "
-            "your current emotional state, then click **Next**."
-        )
-
-        cols = st.columns(4)
-        for i, (cname, cdata) in enumerate(COLOR_PALETTE.items()):
-            with cols[i % 4]:
-                selected = cname in cc.cc_selected_colors
-                border   = f"3px solid {C['teal']}" if selected else f"1px solid {C['border']}"
-                st.markdown(
-                    f"<div style='background:{cdata['hex']};height:48px;border-radius:8px;"
-                    f"border:{border};margin-bottom:4px'></div>",
-                    unsafe_allow_html=True,
-                )
-                label_prefix = "[selected] " if selected else ""
-                if st.button(
-                    f"{label_prefix}{cname}",
-                    key=f"cc_color_{cname}",
-                    use_container_width=True,
-                ):
-                    if selected:
-                        cc.cc_selected_colors.remove(cname)
-                    elif len(cc.cc_selected_colors) < 5:
-                        cc.cc_selected_colors.append(cname)
-                    st.rerun()
-
-        st.caption(f"{len(cc.cc_selected_colors)} / 5 colors selected.")
-
-        if st.button(
-            "Next: Stroke Irregularity Test",
-            type="primary",
-            disabled=(len(cc.cc_selected_colors) == 0),
-        ):
-            neg_scores      = [COLOR_PALETTE[c]["neg"] for c in cc.cc_selected_colors]
-            cc.cc_color_neg = round(float(np.mean(neg_scores)), 4)
-            cc.cc_phase     = 2
-            cc.cc_tap_times = []
-            st.rerun()
-
-    elif cc.cc_phase == 2:
-        @st.fragment
-        def _tap_fragment():
-            ss = st.session_state
-            taps_done = len(ss.cc_tap_times)
-            st.markdown("#### Part 2 of 2 — Stroke Irregularity")
-            st.progress(taps_done / TAP_COUNT, text=f"Tap {taps_done + 1} of {TAP_COUNT}")
-            st.markdown(
-                f"<div style='text-align:center;padding:1.2rem;background:{C['chart_bg']};"
-                f"border-radius:12px;border:1px solid {C['border']};margin:1rem 0'>"
-                f"<p style='color:#374151;margin:0'>Tap the button below at a steady, consistent pace "
-                f"— aim for approximately one tap per second.</p>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-
-            _, col_m, _ = st.columns([1, 2, 1])
-            with col_m:
-                if st.button("TAP", type="primary", use_container_width=True):
-                    ss.cc_tap_times.append(time.time())
-                    if len(ss.cc_tap_times) >= TAP_COUNT:
-                        intervals = [
-                            ss.cc_tap_times[i + 1] - ss.cc_tap_times[i]
-                            for i in range(len(ss.cc_tap_times) - 1)
-                        ]
-                        if len(intervals) >= 2:
-                            cv = float(np.std(intervals) / np.mean(intervals))
-                            ss.cc_stroke_irr = round(float(np.clip(cv / 0.8, 0.0, 1.0)), 4)
-                        else:
-                            ss.cc_stroke_irr = 0.5
-                        ss.cc_phase = 3
-                        st.rerun(scope="app")
-        _tap_fragment()
-
-    elif cc.cc_phase == 3:
-        color_neg  = cc.cc_color_neg  or 0.5
-        stroke_irr = cc.cc_stroke_irr or 0.5
-        chaos_signal = round(0.5 * color_neg + 0.5 * stroke_irr, 4)
-
-        if chaos_signal < 0.33:
-            risk_lbl   = "Low"
-            interp     = "Low psychomotor and emotional distress indicators"
-            interp_sub = "Motor timing is consistent and color associations are positive."
-        elif chaos_signal < 0.55:
-            risk_lbl   = "Moderate"
-            interp     = "Moderate irregularity detected"
-            interp_sub = "Some elevation in color negativity or stroke variance — monitor weekly."
-        else:
-            risk_lbl   = "High"
-            interp     = "Elevated stroke irregularity and/or color negativity"
-            interp_sub = "Significant psychomotor and emotional distress indicators present."
-
-        st.markdown("#### Exercise Results")
-        rc1, rc2, rc3 = st.columns(3)
-        rc1.metric("Color Negativity",    f"{color_neg:.2f}",   "Scale 0–1")
-        rc2.metric("Stroke Irregularity", f"{stroke_irr:.2f}",  "Scale 0–1")
-        rc3.metric("Color Chaos Signal",  f"{chaos_signal:.2f}", f"{risk_lbl} zone")
-
-        rfg = RISK_COLOR[risk_lbl]
-        rbg = RISK_BG[risk_lbl]
-        rbd = RISK_BORDER[risk_lbl]
-        st.markdown(
-            f"<div style='background:{rbg};border:2px solid {rbd};"
-            f"border-radius:14px;padding:16px 20px;margin:.8rem 0'>"
-            f"<strong style='color:{rfg};font-size:1.1rem'>{interp}</strong><br>"
-            f"<span style='color:{C['muted']}'>{interp_sub}</span>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
-        if cc.cc_selected_colors:
-            st.markdown("**Colors selected:**")
-            swatch_cols = st.columns(len(cc.cc_selected_colors))
-            for i, cname in enumerate(cc.cc_selected_colors):
-                with swatch_cols[i]:
-                    st.markdown(
-                        f"<div style='background:{COLOR_PALETTE[cname]['hex']};"
-                        f"height:40px;border-radius:6px;margin-bottom:4px'></div>"
-                        f"<p style='text-align:center;font-size:.8rem;"
-                        f"color:{C['muted']}'>{cname}</p>",
-                        unsafe_allow_html=True,
-                    )
-
-        if len(cc.cc_tap_times) > 1:
-            st.pyplot(tap_interval_chart(cc.cc_tap_times))
-
-        st.info(
-            f"Your Color Chaos signal is estimated at **{chaos_signal:.2f}** (scale 0–1). "
-            f"Enter this value in the Assessment tab under _Color-Pattern Chaos_ to personalise your score."
-        )
-
-        if st.button("Retake Exercise"):
-            for k in list(_cc_defaults.keys()):
-                del st.session_state[k]
-            st.rerun()
+# (Color Chaos Exercise removed — nurses complete the exercise offline and enter
+#  the resulting color_chaos value via the Assessment tab slider.)
