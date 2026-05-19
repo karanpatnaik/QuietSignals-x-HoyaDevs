@@ -1,44 +1,24 @@
-import sys, os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import sys
+import os
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from model.train import train_model
 from model.predict import predict_abte
 
-# run training
 clf = train_model()
 
-# Demo 1: all signals provided manually (behavioral + facial)
 predict_abte(
     clf,
-    nurse_name="Cameron Lau",
+    nurse_name=os.environ.get("NURSE_NAME", "Cameron Lau"),
     signal_values={
-        # behavioral signals
-        "gsr":               0.82,
-        "task_switch":       0.76,
-        "voice_monotony":    0.71,
-        "gait_irregularity": 0.68,
-        "patient_rel":       0.22,
-        "color_chaos":       0.74,
-        "tiktok_burnout":    0.69,
-        # facial signals (as if from grayscale analysis)
-        "facial_negative_load":    0.38,
-        "facial_flat_affect":      0.61,
-        "facial_positive_protect": 0.15,
-    }
-)
-
-# Demo 2: behavioral signals from Fitbit data; facial signals absent (neutral fallback)
-predict_abte(
-    clf,
-    nurse_name="Fitbit Only Demo",
-    signal_values={},
-    fitbit_row={
-        "hrv_rmssd":             28.0,
-        "step_regularity":       0.45,
-        "sleep_efficiency":      72.0,
-        "sleep_duration_hrs":    5.5,
-        "sedentary_bouts":       7,
-        "sleep_onset_variability": 1.1,
-        "n_awakenings":          5,
+        "gsr":               float(os.environ.get("GSR", 0.82)),
+        "task_switch":       float(os.environ.get("TASK_SWITCH", 0.76)),
+        "voice_monotony":    float(os.environ.get("VOICE_MONOTONY", 0.71)),
+        "gait_irregularity": float(os.environ.get("GAIT_IRREGULARITY", 0.68)),
+        "patient_rel":       float(os.environ.get("PATIENT_REL", 0.22)),
+        "color_chaos":       float(os.environ.get("COLOR_CHAOS", 0.74)),
+        "tiktok_burnout":    float(os.environ.get("TIKTOK_BURNOUT", 0.69)),
     }
 )
